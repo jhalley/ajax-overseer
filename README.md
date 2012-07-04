@@ -33,6 +33,7 @@ overseer.stop_polling()
 overseer.stop_polling(fn_name)
 overseer.start_polling()   // exec and restart all the fns
 overseer.start_polling(fn_name)   // exec and restart just this fn
+overseer.exec_once(fn_name)     // manually execute an ajax function once. Does not start polling.
 
 
 -----------------

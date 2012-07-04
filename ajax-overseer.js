@@ -7,6 +7,7 @@ function ajax_overseer(fn_list){
     */
     this.start_polling = start_polling;
     this.stop_polling = stop_polling;
+    this.exec_once = exec_once;
     // for debugging
     this.ajax_function_list = function(){ return ajax_function_list; }
     this.ajax_status = function() { return ajax_status; }
@@ -125,7 +126,7 @@ function ajax_overseer(fn_list){
         var alert_msg = '';
 
         if (delay == -1){
-            alert_msg = 'It appears that there is a problem reaching the server. Please refresh the page again after a while.';    
+            alert_msg = 'It appears that there is a problem reaching the server. Please refresh the page again after a while';    
             $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
         } else {
             alert_msg = '<strong>'+x.pretty_fn_name+' timed out!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
@@ -149,12 +150,38 @@ function ajax_overseer(fn_list){
         $('.alert').alert();    // to enable the close functionality of the alert
     }
 
+    // this function is used if you want to trigger the ajax function once but not make it poll
+    // we need to duplicate the function entry on ajax_function_list but set the delay to -1
+    // this way, it can run side by side with the original polling function
+    function exec_once(fn_name){
+        var x, clone, timing_entry;
+
+        // locate the entry on ajax_function_timings
+        for (var i = 0; i < ajax_function_list.length; i++){
+            if (ajax_function_list[i].fn_name == fn_name){
+                timing_entry = i;
+                break;
+            }
+        }
+        if (typeof timing_entry == 'undefined'){
+            throw "function not found!";
+        }
+
+        // duplicate function, set interval to -1, change function name to '...'+'_runonce'
+        clone = jQuery.extend(true, {}, ajax_function_list[timing_entry]); // deep copy method by john resig
+        clone.interval = -1;
+        clone.fn_name += '_runonce';
+
+        // do the actual execution
+        fn_preloader(clone);
+
+    }
+
     // do ajax call function
     // TODO: clean up this function. It's a mess!
     function exec_ajax(x){
         if (ajax_status[x.fn_name].status == 'WAITING'){
             ajax_calls[x.fn_name].abort();  // Cancel ongoing ajax call
-            //pause_polling(x.fn_name);  // Temporarily cancel polling
             ajax_status[x.fn_name].status = 'TIMEDOUT';
             ajax_status[x.fn_name].trigger_delay += 1;
 
@@ -169,22 +196,7 @@ function ajax_overseer(fn_list){
                 ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, delay);
             }
             
-        } else if (ajax_status[x.fn_name].status == 'TIMEDOUT') {
-            ajax_status[x.fn_name].status = 'WAITING';
-            ajax_status[x.fn_name].last_run = new Date();
-            ajax_calls[x.fn_name] = $.ajax(
-                    {url: x.url, dataType: x.dataType, timeout: x.timeout, beforeSend: x.beforeSend, success: x.success, error: x.error}
-                ).done(function(){
-                    ajax_status[x.fn_name].status = 'ACTIVE';
-                    ajax_status[x.fn_name].trigger_delay = 0;
-                    //unpause_polling(x.fn_name);
-                    clearTimeout(ajax_settimeouts[x.fn_name]);
-                    ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
-                }).fail(function(){
-                    exec_ajax(x);
-                });
-
-        } else if (ajax_status[x.fn_name].status == 'ACTIVE') {
+        } else if ((ajax_status[x.fn_name].status == 'TIMEDOUT') || (ajax_status[x.fn_name].status == 'ACTIVE')) {
             ajax_status[x.fn_name].status = 'WAITING';
             ajax_status[x.fn_name].last_run = new Date();
             ajax_calls[x.fn_name] = $.ajax(
@@ -193,12 +205,15 @@ function ajax_overseer(fn_list){
                     ajax_status[x.fn_name].status = 'ACTIVE';
                     ajax_status[x.fn_name].trigger_delay = 0;
                     clearTimeout(ajax_settimeouts[x.fn_name]);
-                    ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
+                    if (x.interval != -1){
+                        ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
+                    }
                 }).fail(function(){
                     exec_ajax(x);
                 });
             // TODO: need to handle the possible error return!
         }
+
     }
 
     // function that sets up function polling
