@@ -8,7 +8,7 @@ To use it:
     var ajax_fn_2 = {
         'fn_name': 'ajax_fn_2',
         'pretty_fn_name': 'Ajax Function 2',
-        'url': '/test_ajax_fn_1/',
+        'url': '/test_ajax_fn_1/',  // you can also pass in a function
         'dataType': 'json',
         'timeout': 8000,
         'interval': 8000,

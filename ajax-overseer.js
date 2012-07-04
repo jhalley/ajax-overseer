@@ -200,13 +200,14 @@ function ajax_overseer(fn_list){
             ajax_status[x.fn_name].status = 'WAITING';
             ajax_status[x.fn_name].last_run = new Date();
             ajax_calls[x.fn_name] = $.ajax(
-                    {url: x.url, dataType: x.dataType, timeout: x.timeout, beforeSend: x.beforeSend, success: x.success, error: x.error}
+                    {url: typeof x.url == 'function' ? x.url():x.url, dataType: x.dataType, timeout: x.timeout, beforeSend: x.beforeSend, success: x.success, error: x.error}
                 ).done(function(){
                     ajax_status[x.fn_name].status = 'ACTIVE';
                     ajax_status[x.fn_name].trigger_delay = 0;
                     clearTimeout(ajax_settimeouts[x.fn_name]);
                     if (x.interval != -1){
                         ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
+                        console.log(x.fn_name + ': ' + x.interval);
                     }
                 }).fail(function(){
                     exec_ajax(x);
