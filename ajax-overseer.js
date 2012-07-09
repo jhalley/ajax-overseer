@@ -126,13 +126,18 @@ function ajax_overseer(fn_list){
         var alert_msg = '';
 
         if (delay == -1){
-            alert_msg = 'It appears that there is a problem reaching the server. Please refresh the page again after a while';    
-            $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
+            if ($('.server-error').length == 0){ // There is no server error message being displayed
+                alert_msg = 'It appears that there is a problem reaching the server. Please refresh the page again after a while';    
+                $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
+                $('#'+rand_id).addClass('server-error');
+            } else {    // for debugging
+                console.log('Server error message is already displayed.');
+            }
         } else {
             alert_msg = '<strong>'+x.pretty_fn_name+' timed out!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
             $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
 
-            $(function(){
+            (function(){
                 var countdown = parseInt(delay_str.substr(0, delay_str.length - 3));
                 countdown.this_interval = setInterval(function(){   // assigning the setInterval to locally scoped countdown object
                     countdown--;
@@ -141,7 +146,7 @@ function ajax_overseer(fn_list){
                         clearInterval(countdown.this_interval);
                     };
                 }, 1000);
-            });
+            })();
 
             setTimeout(function() {
                 $("#"+rand_id).fadeOut().empty();
@@ -207,7 +212,6 @@ function ajax_overseer(fn_list){
                     clearTimeout(ajax_settimeouts[x.fn_name]);
                     if (x.interval != -1){
                         ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
-                        console.log(x.fn_name + ': ' + x.interval);
                     }
                 }).fail(function(){
                     exec_ajax(x);
