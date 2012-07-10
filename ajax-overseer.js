@@ -18,6 +18,8 @@ function ajax_overseer(fn_list){
     /* 
         Private variables and methods
     */
+    var MAX_NUM_RETRIES = 0;   // This is used to keep track of the number of successive failed ajax attempts.
+    var MAX_NUM_RETRIES_LIMIT = 10;     // If MAX_NUM_RETRIES exceeds this, we stop all polling and display an error message
     var ajax_function_list = fn_list;
     var ajax_timers = [];
     var ajax_settimeouts = {};
@@ -127,14 +129,17 @@ function ajax_overseer(fn_list){
 
         if (delay == -1){
             if ($('.server-error').length == 0){ // There is no server error message being displayed
-                alert_msg = 'It appears that there is a problem reaching the server. Please refresh the page again after a while';    
+                alert_msg = 'It appears that there is either a problem reaching the server or a problem with the app. Please refresh the page again after a while';    
                 $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
                 $('#'+rand_id).addClass('server-error');
-            } else {    // for debugging
-                console.log('Server error message is already displayed.');
+            } 
+
+            if (MAX_NUM_RETRIES >= MAX_NUM_RETRIES_LIMIT){ // stop all other polls and delete all other messages
+                stop_polling(); // stop all ajax funtions
+                $('.alert-error').filter(':not(".server-error")').remove();
             }
         } else {
-            alert_msg = '<strong>'+x.pretty_fn_name+' timed out!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
+            alert_msg = '<strong>'+x.fn_pretty_name+' timed out!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
             $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
 
             (function(){
@@ -142,15 +147,12 @@ function ajax_overseer(fn_list){
                 countdown.this_interval = setInterval(function(){   // assigning the setInterval to locally scoped countdown object
                     countdown--;
                     $('#'+rand_id+'_countdown').empty().append(countdown);
-                    if (countdown == 1){
+                    if (countdown <= 1){
                         clearInterval(countdown.this_interval);
+                        $("#"+rand_id).fadeOut().remove();   // removes the alert box
                     };
                 }, 1000);
             })();
-
-            setTimeout(function() {
-                $("#"+rand_id).fadeOut().empty();
-            }, delay-1);
         }
         $('.alert').alert();    // to enable the close functionality of the alert
     }
@@ -160,22 +162,39 @@ function ajax_overseer(fn_list){
     // this way, it can run side by side with the original polling function
     function exec_once(fn_name){
         var x, clone, timing_entry;
-
-        // locate the entry on ajax_function_timings
-        for (var i = 0; i < ajax_function_list.length; i++){
-            if (ajax_function_list[i].fn_name == fn_name){
-                timing_entry = i;
-                break;
+        
+        if (typeof fn_name == 'object'){
+            clone = jQuery.extend(true, {}, fn_name);   // deep copy method by john resig
+            if ((!clone.url) || (!clone.dataType) || (!clone.timeout) || (!clone.success)){         // necessary variables
+                throw "Missing variables."
             }
-        }
-        if (typeof timing_entry == 'undefined'){
-            throw "function not found!";
-        }
 
-        // duplicate function, set interval to -1, change function name to '...'+'_runonce'
-        clone = jQuery.extend(true, {}, ajax_function_list[timing_entry]); // deep copy method by john resig
-        clone.interval = -1;
-        clone.fn_name += '_runonce';
+            if (!clone.fn_name){
+                clone.fn_name = "anon_ajax_fn_" + Math.floor((Math.random() * 100000) + 1);
+                clone.fn_pretty_name = "Anonymous Ajax Function";
+            }
+
+            // make it run only once
+            clone.interval = -1;
+
+        } else {    // preloaded function on ajax_function_list
+            // locate the entry on ajax_function_timings
+            for (var i = 0; i < ajax_function_list.length; i++){
+                if (ajax_function_list[i].fn_name == fn_name){
+                    timing_entry = i;
+                    break;
+                }
+            }
+            if (typeof timing_entry == 'undefined'){
+                throw "function not found!";
+            }
+
+            // duplicate function, set interval to -1, change function name to '...'+'_runonce'
+            clone = jQuery.extend(true, {}, ajax_function_list[timing_entry]); // deep copy method by john resig
+            clone.interval = -1;
+            clone.fn_name += '_runonce';
+
+        }
 
         // do the actual execution
         fn_preloader(clone);
@@ -189,9 +208,10 @@ function ajax_overseer(fn_list){
             ajax_calls[x.fn_name].abort();  // Cancel ongoing ajax call
             ajax_status[x.fn_name].status = 'TIMEDOUT';
             ajax_status[x.fn_name].trigger_delay += 1;
+            MAX_NUM_RETRIES += 1;
 
-            if (ajax_status[x.fn_name].trigger_delay >= backoff_values.length){
-                console.log('It appears that there is a problem reaching the server. Please refresh the page again after a while.');
+            if ((ajax_status[x.fn_name].trigger_delay >= backoff_values.length) || (MAX_NUM_RETRIES >= MAX_NUM_RETRIES_LIMIT)){
+                console.log('It appears that there is either a problem reaching the server or a problem with the app. Please refresh the page again after a while.');
                 timeout_inform(x, -1);
             } else {
                 var delay = backoff_values[ajax_status[x.fn_name].trigger_delay];  // Because we need it in milliseconds 
@@ -204,15 +224,23 @@ function ajax_overseer(fn_list){
         } else if ((ajax_status[x.fn_name].status == 'TIMEDOUT') || (ajax_status[x.fn_name].status == 'ACTIVE')) {
             ajax_status[x.fn_name].status = 'WAITING';
             ajax_status[x.fn_name].last_run = new Date();
-            ajax_calls[x.fn_name] = $.ajax(
-                    {url: typeof x.url == 'function' ? x.url():x.url, dataType: x.dataType, timeout: x.timeout, beforeSend: x.beforeSend, success: x.success, error: x.error}
-                ).done(function(){
+            ajax_calls[x.fn_name] = $.ajax({
+                    // required variables
+                    url: typeof x.url == 'function' ? x.url():x.url, 
+                    dataType: x.dataType, 
+                    timeout: x.timeout, 
+                    // non-required variables
+                    beforeSend: typeof x.beforeSend == 'function' ? x.beforeSend:'', 
+                    success: typeof x.success == 'function' ? x.success:'', 
+                    error: typeof x.error == 'function' ? x.error:'',
+                }).done(function(data){
+                    MAX_NUM_RETRIES = 0;    // every time there is a successful ajax call, we reset this var to 0
                     ajax_status[x.fn_name].status = 'ACTIVE';
                     ajax_status[x.fn_name].trigger_delay = 0;
                     clearTimeout(ajax_settimeouts[x.fn_name]);
-                    if (x.interval != -1){
+                    if (x.interval != -1){  // if it's an exec_once function, done do nothing
                         ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
-                    }
+                    } 
                 }).fail(function(){
                     exec_ajax(x);
                 });
