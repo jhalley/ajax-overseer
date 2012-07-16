@@ -52,40 +52,45 @@ function ajax_overseer(fn_list){
     // function that starts the ajax requests
     function start_polling(fn_name){
         try {
-            fn_name = typeof fn_name !== 'undefined' ? fn_name: 'all'; // default value is 'all' if no fn_name given
+            if (typeof fn_name == 'object'){
+                ajax_function_list.push(jQuery.extend(true, {}, fn_name));
+                start_polling(fn_name.fn_name);
+            } else {    // fn_name is a string or an undefined
+                fn_name = typeof fn_name !== 'undefined' ? fn_name: 'all'; // default value is 'all' if no fn_name given
 
-            // set up timers for ajax updates 
-            if (fn_name == 'all'){
-                // stop all timers first
-                if (!stop_polling()){
-                    throw "stop_polling function failed!";
-                }
-                
-                for (var i = 0; i < ajax_function_list.length; i++){
-                    fn_preloader(ajax_function_list[i]);
-                }
-            } else {
-                // stop timer first
-                if (!stop_polling(fn_name)){
-                    throw "stop_polling function failed!";
-                }
-
-                // locate the entry on ajax_function_timings
-                var timing_entry;
-                for (var i = 0; i < ajax_function_list.length; i++){
-                    if (ajax_function_list[i].fn_name == fn_name){
-                        timing_entry = i;
-                        break;
+                // set up timers for ajax updates 
+                if (fn_name == 'all'){
+                    // stop all timers first
+                    if (!stop_polling()){
+                        throw "stop_polling function failed!";
                     }
-                }
-                if (typeof timing_entry == 'undefined'){
-                    throw "function not found!";
+                    
+                    for (var i = 0; i < ajax_function_list.length; i++){
+                        fn_preloader(ajax_function_list[i]);
+                    }
+                } else {
+                    // stop timer first
+                    if (!stop_polling(fn_name)){
+                        throw "stop_polling function failed!";
+                    }
+
+                    // locate the entry on ajax_function_timings
+                    var timing_entry;
+                    for (var i = 0; i < ajax_function_list.length; i++){
+                        if (ajax_function_list[i].fn_name == fn_name){
+                            timing_entry = i;
+                            break;
+                        }
+                    }
+                    if (typeof timing_entry == 'undefined'){
+                        throw "function not found!";
+                    }
+
+                    fn_preloader(ajax_function_list[timing_entry]);
                 }
 
-                fn_preloader(ajax_function_list[timing_entry]);
+                return true;
             }
-
-            return true;
         } catch (err) {
             console.log('Start polling failed.');
             return false;
@@ -104,7 +109,7 @@ function ajax_overseer(fn_list){
                     delete ajax_status[timer];
                 }
             } else {
-                if (ajax_timers[fn_name] !== 'undefined') {
+                if (typeof(ajax_status[fn_name]) != 'undefined') {
                     ajax_calls[fn_name].abort();
                     clearTimeout(ajax_settimeouts[fn_name]);
                     delete ajax_status[fn_name];
