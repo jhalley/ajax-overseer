@@ -9,7 +9,7 @@ function ajax_overseer(fn_list){
     this.stop_polling = stop_polling;
     this.exec_once = exec_once;
     // for debugging
-    this.ajax_function_list = function(){ return ajax_function_list; }
+    this.polling_list = function(){ return polling_list; }
     this.ajax_status = function() { return ajax_status; }
     this.ajax_calls = function() { return ajax_calls; }
     this.ajax_settimeouts = function() { return ajax_settimeouts; }
@@ -19,12 +19,12 @@ function ajax_overseer(fn_list){
         Private variables and methods
     */
     var MAX_NUM_RETRIES = 0;   // This is used to keep track of the number of successive failed ajax attempts.
-    var MAX_NUM_RETRIES_LIMIT = 10;     // If MAX_NUM_RETRIES exceeds this, we stop all polling and display an error message
-    var ajax_function_list = fn_list;
+    var MAX_NUM_RETRIES_LIMIT = 20;     // If MAX_NUM_RETRIES exceeds this, we stop all polling and display an error message
+    var polling_list = fn_list;
     var ajax_timers = [];
     var ajax_settimeouts = {};
     var ajax_calls = {};
-    var backoff_values = [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000];  // Leading zero is because trigger_delay starts at 0 and we do a +=. I don't want to start it at -1.
+    var backoff_values = [0, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000];  // Leading zero is because trigger_delay starts at 0 and we do a +=. I don't want to start it at -1.
     /* 
         eg:
             ajax_status['ajax_fn_1'] = { 'status': 'ACTIVE', 'trigger_delay': 0, 'last_run': new Date() }
@@ -53,7 +53,7 @@ function ajax_overseer(fn_list){
     function start_polling(fn_name){
         try {
             if (typeof fn_name == 'object'){
-                ajax_function_list.push(jQuery.extend(true, {}, fn_name));
+                polling_list.push(jQuery.extend(true, {}, fn_name));
                 start_polling(fn_name.fn_name);
             } else {    // fn_name is a string or an undefined
                 fn_name = typeof fn_name !== 'undefined' ? fn_name: 'all'; // default value is 'all' if no fn_name given
@@ -65,8 +65,8 @@ function ajax_overseer(fn_list){
                         throw "stop_polling function failed!";
                     }
                     
-                    for (var i = 0; i < ajax_function_list.length; i++){
-                        fn_preloader(ajax_function_list[i]);
+                    for (var i = 0; i < polling_list.length; i++){
+                        fn_preloader(polling_list[i]);
                     }
                 } else {
                     // stop timer first
@@ -76,8 +76,8 @@ function ajax_overseer(fn_list){
 
                     // locate the entry on ajax_function_timings
                     var timing_entry;
-                    for (var i = 0; i < ajax_function_list.length; i++){
-                        if (ajax_function_list[i].fn_name == fn_name){
+                    for (var i = 0; i < polling_list.length; i++){
+                        if (polling_list[i].fn_name == fn_name){
                             timing_entry = i;
                             break;
                         }
@@ -86,7 +86,7 @@ function ajax_overseer(fn_list){
                         throw "function not found!";
                     }
 
-                    fn_preloader(ajax_function_list[timing_entry]);
+                    fn_preloader(polling_list[timing_entry]);
                 }
 
                 return true;
@@ -163,7 +163,7 @@ function ajax_overseer(fn_list){
     }
 
     // this function is used if you want to trigger the ajax function once but not make it poll
-    // we need to duplicate the function entry on ajax_function_list but set the delay to -1
+    // we need to duplicate the function entry on polling_list but set the delay to -1
     // this way, it can run side by side with the original polling function
     function exec_once(fn_name){
         var x, clone, timing_entry;
@@ -182,10 +182,10 @@ function ajax_overseer(fn_list){
             // make it run only once
             clone.interval = -1;
 
-        } else {    // preloaded function on ajax_function_list
+        } else {    // preloaded function on polling_list
             // locate the entry on ajax_function_timings
-            for (var i = 0; i < ajax_function_list.length; i++){
-                if (ajax_function_list[i].fn_name == fn_name){
+            for (var i = 0; i < polling_list.length; i++){
+                if (polling_list[i].fn_name == fn_name){
                     timing_entry = i;
                     break;
                 }
@@ -195,7 +195,7 @@ function ajax_overseer(fn_list){
             }
 
             // duplicate function, set interval to -1, change function name to '...'+'_runonce'
-            clone = jQuery.extend(true, {}, ajax_function_list[timing_entry]); // deep copy method by john resig
+            clone = jQuery.extend(true, {}, polling_list[timing_entry]); // deep copy method by john resig
             clone.interval = -1;
             clone.fn_name += '_runonce';
 
@@ -243,9 +243,11 @@ function ajax_overseer(fn_list){
                     ajax_status[x.fn_name].status = 'ACTIVE';
                     ajax_status[x.fn_name].trigger_delay = 0;
                     clearTimeout(ajax_settimeouts[x.fn_name]);
-                    if (x.interval != -1){  // if it's an exec_once function, done do nothing
+                    if (x.interval != -1){  // polling function, set up timer for next poll iteration
                         ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
-                    } 
+                    } else {   // exec_once function, set status to 'DONE'
+                        ajax_status[x.fn_name].status = 'DONE';
+                    }
                 }).fail(function(){
                     exec_ajax(x);
                 });
