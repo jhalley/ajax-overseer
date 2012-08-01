@@ -238,6 +238,8 @@ function ajax_overseer(fn_list){
                     beforeSend: typeof x.beforeSend == 'function' ? x.beforeSend:'', 
                     success: typeof x.success == 'function' ? x.success:'', 
                     error: typeof x.error == 'function' ? x.error:'',
+                    type: typeof x.type != 'undefined' ? x.type:'GET',
+                    data: typeof x.data != 'undefined' ? x.data:'',
                 }).done(function(data){
                     MAX_NUM_RETRIES = 0;    // every time there is a successful ajax call, we reset this var to 0
                     ajax_status[x.fn_name].status = 'ACTIVE';
