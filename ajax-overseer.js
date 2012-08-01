@@ -134,7 +134,7 @@ function ajax_overseer(fn_list){
 
         if (delay == -1){
             if ($('.server-error').length == 0){ // There is no server error message being displayed
-                alert_msg = 'It appears that there is either a problem reaching the server or a problem with the app. Please refresh the page again after a while';    
+                alert_msg = 'It appears that there is either a problem reaching the server or a problem with the app. Please refresh the page again after a while. If the problem persists, please contact the developers';    
                 $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
                 $('#'+rand_id).addClass('server-error');
             } 
@@ -144,7 +144,11 @@ function ajax_overseer(fn_list){
                 $('.alert-error').filter(':not(".server-error")').remove();
             }
         } else {
-            alert_msg = '<strong>'+x.fn_pretty_name+' timed out!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
+            if (ajax_status[x.fn_name].error_details['status'] == 'timeout'){
+                alert_msg = '<strong>'+x.fn_pretty_name+' timed out!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
+            } else { // We got an error instead of a timeout
+                alert_msg = '<strong>'+x.fn_pretty_name+' returned an error ('+ajax_status[x.fn_name].error_details['errorThrown']+')!</strong> Retrying in <span id="'+rand_id+'_countdown">'+ delay_str.substr(0, delay_str.length - 3) + '</span>s</br>';
+            }
             $('#alert_wrapper').prepend(msg + alert_msg + msg_end);
 
             (function(){
@@ -211,22 +215,23 @@ function ajax_overseer(fn_list){
     function exec_ajax(x){
         if (ajax_status[x.fn_name].status == 'WAITING'){
             ajax_calls[x.fn_name].abort();  // Cancel ongoing ajax call
-            ajax_status[x.fn_name].status = 'TIMEDOUT';
+            //ajax_status[x.fn_name].status = 'TIMEDOUT';
+            ajax_status[x.fn_name].status = ajax_status[x.fn_name].error_details['status'] == 'timeout' ? 'TIMEDOUT':'ERROR';
             ajax_status[x.fn_name].trigger_delay += 1;
             MAX_NUM_RETRIES += 1;
 
             if ((ajax_status[x.fn_name].trigger_delay >= backoff_values.length) || (MAX_NUM_RETRIES >= MAX_NUM_RETRIES_LIMIT)){
-                console.log('It appears that there is either a problem reaching the server or a problem with the app. Please refresh the page again after a while.');
+                //console.log('It appears that there is either a problem reaching the server or a problem with the app. Please refresh the page again after a while.');
                 timeout_inform(x, -1);
             } else {
                 var delay = backoff_values[ajax_status[x.fn_name].trigger_delay];  // Because we need it in milliseconds 
                 timeout_inform(x, delay);
-                console.log('Retrying in: ' + delay);
+                //console.log('Retrying in: ' + delay);
                 // TODO: think of a better way to do this
                 ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, delay);
             }
             
-        } else if ((ajax_status[x.fn_name].status == 'TIMEDOUT') || (ajax_status[x.fn_name].status == 'ACTIVE')) {
+        } else if ((ajax_status[x.fn_name].status == 'ERROR') || (ajax_status[x.fn_name].status == 'TIMEDOUT') || (ajax_status[x.fn_name].status == 'ACTIVE')) {
             ajax_status[x.fn_name].status = 'WAITING';
             ajax_status[x.fn_name].last_run = new Date();
             ajax_calls[x.fn_name] = $.ajax({
@@ -244,13 +249,17 @@ function ajax_overseer(fn_list){
                     MAX_NUM_RETRIES = 0;    // every time there is a successful ajax call, we reset this var to 0
                     ajax_status[x.fn_name].status = 'ACTIVE';
                     ajax_status[x.fn_name].trigger_delay = 0;
+                    ajax_status[x.fn_name].error_details = {};
                     clearTimeout(ajax_settimeouts[x.fn_name]);
                     if (x.interval != -1){  // polling function, set up timer for next poll iteration
                         ajax_settimeouts[x.fn_name] = setTimeout(function(){exec_ajax(x);}, x.interval);
                     } else {   // exec_once function, set status to 'DONE'
                         ajax_status[x.fn_name].status = 'DONE';
                     }
-                }).fail(function(){
+                }).fail(function(jqXHR, status, errorThrown){
+                    ajax_status[x.fn_name].error_details = {};
+                    ajax_status[x.fn_name].error_details['status'] = status;
+                    ajax_status[x.fn_name].error_details['errorThrown'] = errorThrown;
                     exec_ajax(x);
                 });
             // TODO: need to handle the possible error return!
