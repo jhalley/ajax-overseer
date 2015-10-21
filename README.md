@@ -5,6 +5,7 @@ Javascript object that helps to manage execution and polling of ajax functions.
 
 To use it:
 1) Modify your ajax calls to have the following format:
+```
     var ajax_fn_2 = {
         'fn_name': 'ajax_fn_2',
         'pretty_fn_name': 'Ajax Function 2',
@@ -16,12 +17,15 @@ To use it:
         'success': function(data){...},
         'error': function(jqXHR, status, errorThrown){...},
     }
+```
 
 2) Create an overseer object:
+```
 var overseer = new ajax_overseer([
             ajax_fn_1,
             ajax_fn_2,
         ]);
+```
 
 3) Tell overseer to start polling:
 overseer.start_polling();
