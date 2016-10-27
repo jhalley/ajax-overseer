@@ -1,7 +1,7 @@
 ajax-overseer
 =============
 
-Javascript object that helps to manage execution and polling of ajax functions.
+Javascript object that helps to manage execution and polling of ajax functions
 
 To use it:
 1) Modify your ajax calls to have the following format:
